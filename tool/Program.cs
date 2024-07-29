@@ -10,7 +10,7 @@ foreach (var rawFileName in files)
 {
     var fileType = Path.GetExtension(rawFileName);
 
-    Console.WriteLine($"Prosessing {rawFileName}");
+    Console.WriteLine($"Processing {rawFileName}");
 
     switch (fileType)
     {
@@ -39,14 +39,7 @@ void CopyFile(string rawFileName)
     var zipdata = new ZipData
     {
         FileName = fileName,
-        Files =
-        [
-            new HashedFile
-            {
-                Name = fileName,
-                Hash = SaveFileInDb(rawFileName)
-            }
-        ]
+        Files = [SaveFileInDb(rawFileName)]
     };
 
     collection.Insert(zipdata);
@@ -71,7 +64,7 @@ void Unzip(string path)
     foreach (var entry in archive.Entries)
     {
         var hash = SaveFileInDb(entry.FullName, entry);
-        zipdata.Files.Add(new HashedFile { Name = entry.FullName, Hash = hash });
+        zipdata.Files.Add(hash);
     }
 
     collection.Insert(zipdata);
@@ -87,7 +80,7 @@ string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
     if (fileStorage.FindById(hash) == null)
     {
         using var storeStream = data != null ? data.Open() : File.OpenRead(filename);
-        fileStorage.Upload(hash, $"{hash}{Path.GetExtension(filename)}", storeStream);
+        fileStorage.Upload(hash, filename, storeStream);
         Console.WriteLine($"File {filename} store {hash}");
     }
     else
@@ -98,15 +91,8 @@ string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
     return hash;
 }
 
-
 public record ZipData
 {
     public required string FileName { get; set; }
-    public List<HashedFile> Files { get; set; } = [];
-}
-
-public record HashedFile
-{
-    public required string Name { get; set; }
-    public required string Hash { get; set; }
+    public List<string> Files { get; set; } = [];
 }
