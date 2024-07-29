@@ -24,32 +24,32 @@ app.MapGet("/getfile/{file}", (string file) =>
 
         var fileType = Path.GetExtension(file);
 
-        if (fileType == ".zip" || fileType == ".skinzip")
+        switch (fileType)
         {
-            var memoryStream = new MemoryStream();
-            var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true);
+            case ".zip":
+            case ".skinzip":
+                var memoryStream = new MemoryStream();
+                using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
+                {
+                    foreach (var fileHash in fileData.Files)
+                    {
+                        var cf = fileStorage.FindById(fileHash);
+                        if (cf == null)
+                            return Results.NotFound();
+                        var archiveFile = archive.CreateEntry(cf.Filename, CompressionLevel.Fastest);
+                        using var entryStream = archiveFile.Open();
+                        cf.CopyTo(entryStream);
+                    }
+                }
 
-            foreach (var fileHash in fileData.Files)
-            {
-                var f = fileStorage.FindById(fileHash);
+                memoryStream.Seek(0, SeekOrigin.Begin);
+                return Results.File(memoryStream, "application/zip", file);
+            default:
+                var rf = fileData.Files.First();
+                var f = fileStorage.FindById(rf);
                 if (f == null)
                     return Results.NotFound();
-
-                var archiveFile = archive.CreateEntry(f.Filename, CompressionLevel.Fastest);
-                using var entryStream = archiveFile.Open();
-                f.CopyTo(entryStream);
-            }
-
-            memoryStream.Seek(0, SeekOrigin.Begin);
-            return Results.Stream(memoryStream, "application/x-zip", file);
-        }
-        else
-        {
-            var rf = fileData.Files.First();
-            var f = fileStorage.FindById(rf);
-            if (f == null)
-                return Results.NotFound();
-            return Results.Stream(f.OpenRead(), f.MimeType, f.Filename);
+                return Results.File(f.OpenRead(), f.MimeType, f.Filename);
         }
     })
     .WithOpenApi();
