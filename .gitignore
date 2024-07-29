@@ -485,3 +485,4 @@ $RECYCLE.BIN/
 /tool/repofiles/*
 /tool/LiteDB.Studio.exe
 database.db
+database-log.db

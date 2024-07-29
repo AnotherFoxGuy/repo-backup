@@ -1,10 +1,6 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Security.Cryptography;
 using LiteDB;
-
-Console.WriteLine("Hello, World!");
 
 using var db = new LiteDatabase("database.db");
 var fileStorage = db.FileStorage;
@@ -12,20 +8,17 @@ var fileStorage = db.FileStorage;
 var files = Directory.GetFiles("repofiles");
 foreach (var rawFileName in files)
 {
-    var fileName = Path.GetFileName(rawFileName);
     var fileType = Path.GetExtension(rawFileName);
 
-//    Console.WriteLine(fileName);
+    Console.WriteLine($"Prosessing {rawFileName}");
 
     switch (fileType)
     {
         case ".zip":
         case ".skinzip":
-//            Console.WriteLine("unzip");
             Unzip(rawFileName);
             break;
         default:
-//            Console.WriteLine($"{fileType}, copy");
             CopyFile(rawFileName);
             break;
     }
@@ -46,7 +39,14 @@ void CopyFile(string rawFileName)
     var zipdata = new ZipData
     {
         FileName = fileName,
-        Files = [SaveFileInDb(rawFileName)]
+        Files =
+        [
+            new HashedFile
+            {
+                Name = fileName,
+                Hash = SaveFileInDb(rawFileName)
+            }
+        ]
     };
 
     collection.Insert(zipdata);
@@ -71,7 +71,7 @@ void Unzip(string path)
     foreach (var entry in archive.Entries)
     {
         var hash = SaveFileInDb(entry.FullName, entry);
-        zipdata.Files.Add(hash);
+        zipdata.Files.Add(new HashedFile { Name = entry.FullName, Hash = hash });
     }
 
     collection.Insert(zipdata);
@@ -102,5 +102,11 @@ string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
 public record ZipData
 {
     public required string FileName { get; set; }
-    public List<string> Files { get; set; } = [];
+    public List<HashedFile> Files { get; set; } = [];
+}
+
+public record HashedFile
+{
+    public required string Name { get; set; }
+    public required string Hash { get; set; }
 }
