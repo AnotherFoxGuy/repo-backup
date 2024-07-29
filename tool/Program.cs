@@ -79,10 +79,10 @@ void Unzip(string path)
 
 string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
 {
-    using var md5 = MD5.Create();
+    using var hashgen = SHA256.Create();
     using var stream = data != null ? data.Open() : File.OpenRead(filename);
 
-    var hash = BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", "").ToLower();
+    var hash = BitConverter.ToString(hashgen.ComputeHash(stream)).Replace("-", "").ToLower();
 
     if (fileStorage.FindById(hash) == null)
     {
