@@ -12,15 +12,22 @@ foreach (var rawFileName in files)
 
     Console.WriteLine($"Processing {rawFileName}");
 
-    switch (fileType)
+    try
     {
-        case ".zip":
-        case ".skinzip":
-            Unzip(rawFileName);
-            break;
-        default:
-            CopyFile(rawFileName);
-            break;
+        switch (fileType)
+        {
+            case ".zip":
+            case ".skinzip":
+                Unzip(rawFileName);
+                break;
+            default:
+                CopyFile(rawFileName);
+                break;
+        }
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine(e.Message);
     }
 }
 
