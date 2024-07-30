@@ -488,3 +488,5 @@ database.db
 database-log.db
 tool/filestorage/*
 web/filestorage/*
+tool/database.json
+web/database.json

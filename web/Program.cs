@@ -1,8 +1,16 @@
 using System.IO.Compression;
 using System.Net;
-using LiteDB;
+using System.Text.Json;
 
-var db = new LiteDatabase("database.db");
+var databasePath = "database.json";
+
+if (!File.Exists(databasePath))
+{
+    Console.WriteLine($"{databasePath} is missing!");
+    return;
+}
+
+var database = JsonSerializer.Deserialize<List<ZipData>>(File.ReadAllText(databasePath));
 
 #if DEBUG
 var baseUrl = "http://127.0.0.1:8080";
@@ -23,9 +31,7 @@ app.UseSwaggerUI();
 // wget http://localhost:5105/getfile/0d6e54b419381_tower_crane_v7.zip -O test.zip
 app.MapGet("/getfile/{file}", async (string file) =>
     {
-        var collection = db.GetCollection<ZipData>("zipdata");
-        collection.EnsureIndex(x => x.FileName);
-        var fileData = collection.FindOne(x => x.FileName == file);
+        var fileData = database.FirstOrDefault(x => x.FileName == file);
         if (fileData == null)
             return Results.NotFound();
 
@@ -44,7 +50,8 @@ app.MapGet("/getfile/{file}", async (string file) =>
                     {
                         foreach (var data in fileData.Files)
                         {
-                            var fp = $"{data.Hash[0]}/{data.Hash[1]}/{data.Hash[2]}/{data.Hash}{Path.GetExtension(data.Name)}";
+                            var fp =
+                                $"{data.Hash[0]}/{data.Hash[1]}/{data.Hash[2]}/{data.Hash}{Path.GetExtension(data.Name)}";
                             var archiveFile = archive.CreateEntry(data.Name, CompressionLevel.Fastest);
                             await using var entryStream = archiveFile.Open();
                             var zipfileStream = await dlClient.GetStreamAsync($"{baseUrl}/{fp}");

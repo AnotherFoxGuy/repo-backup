@@ -1,8 +1,15 @@
 ﻿using System.IO.Compression;
 using System.Security.Cryptography;
-using LiteDB;
+using System.Text.Json;
 
-using var db = new LiteDatabase("database.db");
+List<ZipData> database = [];
+var databasePath = "database.json";
+
+if (File.Exists(databasePath))
+{
+    var jsonString = File.ReadAllText(databasePath);
+    database = JsonSerializer.Deserialize<List<ZipData>>(jsonString);
+}
 
 var files = Directory.GetFiles("repofiles");
 foreach (var rawFileName in files)
@@ -28,17 +35,17 @@ foreach (var rawFileName in files)
     {
         Console.WriteLine(e.Message);
     }
+
+    var jsonString = JsonSerializer.Serialize(database);
+    File.WriteAllText(databasePath, jsonString);
 }
 
 void CopyFile(string rawFileName)
 {
     var fileName = Path.GetFileName(rawFileName);
-    var collection = db.GetCollection<ZipData>("zipdata");
-
-    collection.EnsureIndex(x => x.FileName);
-    if (collection.Exists(x => x.FileName == fileName))
+    if (database.Exists(x => x.FileName == fileName))
     {
-        Console.WriteLine($"File {fileName} already saved in DB");
+        Console.WriteLine($"File {fileName} has already been stored");
         return;
     }
 
@@ -55,19 +62,17 @@ void CopyFile(string rawFileName)
         ]
     };
 
-    collection.Insert(zipdata);
+    database.Add(zipdata);
 }
 
 
 void Unzip(string path)
 {
-    var collection = db.GetCollection<ZipData>("zipdata");
     var fileName = Path.GetFileName(path);
-    collection.EnsureIndex(x => x.FileName);
 
-    if (collection.Exists(x => x.FileName == fileName))
+    if (database.Exists(x => x.FileName == fileName))
     {
-        Console.WriteLine($"Zip {fileName} already saved in DB");
+        Console.WriteLine($"Zip {fileName} has already been stored");
         return;
     }
 
@@ -80,7 +85,7 @@ void Unzip(string path)
         zipdata.Files.Add(new HashedFile { Name = entry.FullName, Hash = hash });
     }
 
-    collection.Insert(zipdata);
+    database.Add(zipdata);
 }
 
 string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
@@ -106,7 +111,7 @@ string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
     }
     else
     {
-        Console.WriteLine($"File {filename} {hash} already in DB");
+        Console.WriteLine($"File {filename} {hash} has already been stored");
     }
 
     return hash;
