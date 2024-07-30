@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using LiteDB;
 
 using var db = new LiteDatabase("database.db");
-var fileStorage = db.FileStorage;
 
 var files = Directory.GetFiles("repofiles");
 foreach (var rawFileName in files)
@@ -46,7 +45,14 @@ void CopyFile(string rawFileName)
     var zipdata = new ZipData
     {
         FileName = fileName,
-        Files = [SaveFileInDb(rawFileName)]
+        Files =
+        [
+            new HashedFile
+            {
+                Name = fileName,
+                Hash = SaveFileInDb(rawFileName)
+            }
+        ]
     };
 
     collection.Insert(zipdata);
@@ -71,7 +77,7 @@ void Unzip(string path)
     foreach (var entry in archive.Entries)
     {
         var hash = SaveFileInDb(entry.FullName, entry);
-        zipdata.Files.Add(hash);
+        zipdata.Files.Add(new HashedFile { Name = entry.FullName, Hash = hash });
     }
 
     collection.Insert(zipdata);
@@ -83,12 +89,20 @@ string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
     using var stream = data != null ? data.Open() : File.OpenRead(filename);
 
     var hash = BitConverter.ToString(hashgen.ComputeHash(stream)).Replace("-", "").ToLower();
+    var storedFilePath = $"./filestorage/{hash[0]}/{hash[1]}/{hash[2]}/{hash}{Path.GetExtension(filename)}";
 
-    if (fileStorage.FindById(hash) == null)
+    if (!File.Exists(storedFilePath))
     {
-        using var storeStream = data != null ? data.Open() : File.OpenRead(filename);
-        fileStorage.Upload(hash, filename, storeStream);
-        Console.WriteLine($"File {filename} store {hash}");
+        var path = Path.GetDirectoryName(storedFilePath);
+        if (!Directory.Exists(path))
+            Directory.CreateDirectory(path);
+
+        if (data != null)
+            data.ExtractToFile(storedFilePath);
+        else
+            File.Copy(filename, storedFilePath);
+
+        Console.WriteLine($"File {filename} store {hash} stored at {storedFilePath}");
     }
     else
     {
@@ -101,5 +115,11 @@ string SaveFileInDb(string filename, ZipArchiveEntry? data = null)
 public record ZipData
 {
     public required string FileName { get; set; }
-    public List<string> Files { get; set; } = [];
+    public List<HashedFile> Files { get; set; } = [];
+}
+
+public record HashedFile
+{
+    public required string Name { get; set; }
+    public required string Hash { get; set; }
 }

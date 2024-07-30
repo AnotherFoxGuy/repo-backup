@@ -486,3 +486,5 @@ $RECYCLE.BIN/
 /tool/LiteDB.Studio.exe
 database.db
 database-log.db
+tool/filestorage/*
+web/filestorage/*
