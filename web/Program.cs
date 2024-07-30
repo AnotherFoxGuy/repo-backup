@@ -1,8 +1,14 @@
 using System.IO.Compression;
+using System.Net;
 using LiteDB;
 
 var db = new LiteDatabase("database.db");
-var fileStorage = db.FileStorage;
+
+#if DEBUG
+var baseUrl = "http://127.0.0.1:8080";
+#else
+var baseUrl = "";
+#endif
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +20,8 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.MapGet("/getfile/{file}", (string file) =>
+// wget http://localhost:5105/getfile/0d6e54b419381_tower_crane_v7.zip -O test.zip
+app.MapGet("/getfile/{file}", async (string file) =>
     {
         var collection = db.GetCollection<ZipData>("zipdata");
         collection.EnsureIndex(x => x.FileName);
@@ -23,33 +30,42 @@ app.MapGet("/getfile/{file}", (string file) =>
             return Results.NotFound();
 
         var fileType = Path.GetExtension(file);
+        var dlClient = new HttpClient();
 
-        switch (fileType)
+        try
         {
-            case ".zip":
-            case ".skinzip":
-                var memoryStream = new MemoryStream();
-                using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
-                {
-                    foreach (var fileHash in fileData.Files)
+            switch (fileType)
+            {
+                case ".zip":
+                case ".skinzip":
+                    app.Logger.LogInformation($"Rebuilding zipfile {file}");
+                    var memoryStream = new MemoryStream();
+                    using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
                     {
-                        var cf = fileStorage.FindById(fileHash);
-                        if (cf == null)
-                            return Results.NotFound();
-                        var archiveFile = archive.CreateEntry(cf.Filename, CompressionLevel.Fastest);
-                        using var entryStream = archiveFile.Open();
-                        cf.CopyTo(entryStream);
+                        foreach (var data in fileData.Files)
+                        {
+                            var fp = $"{data.Hash[0]}/{data.Hash[1]}/{data.Hash[2]}/{data.Hash}{Path.GetExtension(data.Name)}";
+                            var archiveFile = archive.CreateEntry(data.Name, CompressionLevel.Fastest);
+                            await using var entryStream = archiveFile.Open();
+                            var zipfileStream = await dlClient.GetStreamAsync($"{baseUrl}/{fp}");
+                            zipfileStream.CopyTo(entryStream);
+                        }
                     }
-                }
 
-                memoryStream.Seek(0, SeekOrigin.Begin);
-                return Results.File(memoryStream, "application/zip", file);
-            default:
-                var rf = fileData.Files.First();
-                var f = fileStorage.FindById(rf);
-                if (f == null)
-                    return Results.NotFound();
-                return Results.File(f.OpenRead(), f.MimeType, f.Filename);
+                    memoryStream.Seek(0, SeekOrigin.Begin);
+                    return Results.File(memoryStream, "application/zip", file);
+                default:
+                    app.Logger.LogInformation($"Proxying {file}");
+                    var rf = fileData.Files.First();
+                    var storedFilePath = $"{rf.Hash[0]}/{rf.Hash[1]}/{rf.Hash[2]}/{rf.Hash}{Path.GetExtension(file)}";
+                    var stream = await dlClient.GetStreamAsync($"{baseUrl}/{storedFilePath}");
+                    return Results.File(stream, fileDownloadName: rf.Name);
+            }
+        }
+        catch (HttpRequestException e)
+        {
+            app.Logger.LogError(e.Message);
+            return e.StatusCode == HttpStatusCode.NotFound ? Results.NotFound() : Results.BadRequest();
         }
     })
     .WithOpenApi();
@@ -59,5 +75,11 @@ app.Run();
 public record ZipData
 {
     public required string FileName { get; set; }
-    public List<string> Files { get; set; } = [];
+    public List<HashedFile> Files { get; set; } = [];
+}
+
+public record HashedFile
+{
+    public required string Name { get; set; }
+    public required string Hash { get; set; }
 }
